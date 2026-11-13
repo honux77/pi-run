@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>π RUN — 리듬으로 외우는 원주율</title>
+<style>
+  :root {
+    --bg: #0b0d2a;
+    --panel: rgba(16, 19, 58, 0.92);
+    --line: rgba(94, 231, 255, 0.35);
+    --cyan: #5ee7ff;
+    --pink: #ff5fa2;
+    --yellow: #ffd84d;
+    --green: #6dffa8;
+    --text: #eef1ff;
+    --dim: #9aa2d6;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    overflow: hidden; overscroll-behavior: none;
+  }
+  #app {
+    position: relative; width: 100%; height: 100%; max-width: 720px; margin: 0 auto;
+    user-select: none; -webkit-user-select: none; touch-action: manipulation;
+  }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  #hud {
+    position: absolute; top: 0; left: 0; right: 0; padding: 12px 16px 0;
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 8px;
+    pointer-events: none;
+  }
+  #hearts { font-size: 26px; letter-spacing: 4px; color: var(--pink); text-shadow: 0 0 12px rgba(255, 95, 162, .6); }
+  #hearts .lost { color: #3a3f78; text-shadow: none; }
+  #scoreBox { text-align: center; }
+  #score { font: 800 30px/1 ui-monospace, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  #combo { margin-top: 4px; font-size: 13px; font-weight: 700; color: var(--yellow); min-height: 18px; }
+  #count { text-align: right; font-size: 13px; color: var(--dim); line-height: 1.5; }
+  #count b { color: var(--text); font-size: 18px; font-variant-numeric: tabular-nums; }
+  #tape {
+    position: absolute; top: 76px; left: 0; right: 0; text-align: center; pointer-events: none;
+    font: 700 20px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 2px; white-space: nowrap;
+  }
+  #tape .pre { color: var(--dim); }
+  #tape .bad { color: var(--pink); }
+  #tape .last { color: var(--green); }
+  #tape .next { color: var(--yellow); animation: blink 0.8s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+
+  #pads {
+    position: absolute; left: 0; right: 0; bottom: 14px;
+    display: flex; justify-content: center; gap: 10px; padding: 0 12px;
+  }
+  .pad {
+    flex: 1 1 0; max-width: 140px; height: 76px; border-radius: 16px;
+    border: 2px solid var(--line); background: rgba(20, 26, 70, 0.8); color: var(--text);
+    font: 800 34px/1 ui-monospace, Menlo, Consolas, monospace; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pad small { font: 600 11px/1 system-ui, sans-serif; color: var(--dim); }
+  .pad:active, .pad.hit { border-color: var(--cyan); background: rgba(94, 231, 255, 0.18); }
+
+  .overlay {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 16px; background: rgba(6, 7, 26, 0.72); backdrop-filter: blur(4px);
+  }
+  .overlay[hidden] { display: none; }
+  .card {
+    width: 100%; max-width: 440px; max-height: 100%; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 24px 22px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .5); text-align: center;
+  }
+  h1 { margin: 0; font-size: 46px; letter-spacing: 2px; color: var(--yellow); text-shadow: 0 0 24px rgba(255, 216, 77, .45); }
+  h2 { margin: 0 0 4px; font-size: 26px; }
+  .sub { margin: 6px 0 16px; color: var(--dim); font-size: 14px; }
+  ul.how { margin: 0 0 18px; padding: 0; list-style: none; text-align: left; font-size: 14px; line-height: 1.55; }
+  ul.how li { padding: 7px 0; border-top: 1px solid rgba(255, 255, 255, .07); }
+  ul.how b { color: var(--cyan); }
+  kbd {
+    display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 6px; text-align: center;
+    background: #262b66; border: 1px solid #454c99; font: 600 12px ui-monospace, Menlo, monospace;
+  }
+  .btn {
+    appearance: none; border: 0; border-radius: 14px; padding: 13px 22px; cursor: pointer;
+    font: 800 17px system-ui, sans-serif; color: #1a1140; background: var(--yellow);
+  }
+  .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); font-weight: 600; }
+  .btn:focus-visible, .pad:focus-visible, input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
+  .stat { background: rgba(255, 255, 255, .05); border-radius: 12px; padding: 10px 4px; }
+  .stat b { display: block; font: 800 20px ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 11px; color: var(--dim); }
+  #finalScore { font: 800 44px/1.1 ui-monospace, Menlo, monospace; color: var(--yellow); font-variant-numeric: tabular-nums; }
+  #fails { font-size: 13px; color: var(--dim); margin-bottom: 12px; line-height: 1.9; }
+  #fails .chip { display: inline-block; margin: 0 3px; padding: 1px 9px; border-radius: 999px; background: rgba(255, 95, 162, .15); color: #ffb3d1; }
+
+  .board { width: 100%; border-collapse: collapse; margin: 6px 0 16px; font-size: 14px; }
+  .board caption { text-align: left; font-weight: 800; padding-bottom: 6px; color: var(--cyan); }
+  .board th { font-size: 11px; font-weight: 600; color: var(--dim); padding: 4px 6px; border-bottom: 1px solid rgba(255, 255, 255, .12); }
+  .board td { padding: 6px; border-bottom: 1px solid rgba(255, 255, 255, .06); font-variant-numeric: tabular-nums; }
+  .board td:nth-child(1) { width: 34px; color: var(--dim); font-weight: 700; }
+  .board td:nth-child(2) { text-align: left; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board td:nth-child(n+3), .board th:nth-child(n+3) { text-align: right; }
+  .board tr.me td { background: rgba(255, 216, 77, .12); color: var(--yellow); }
+  .board input {
+    width: 100%; background: rgba(0, 0, 0, .35); border: 1px solid var(--yellow); border-radius: 8px;
+    color: var(--yellow); font: 700 14px system-ui, sans-serif; padding: 4px 8px;
+  }
+  .empty { color: var(--dim); font-size: 13px; padding: 14px 0; }
+  .note { font-size: 12px; color: var(--dim); margin: -8px 0 14px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="c"></canvas>
+
+  <div id="hud" hidden>
+    <div id="hearts"></div>
+    <div id="scoreBox"><div id="score">0</div><div id="combo"></div></div>
+    <div id="count"></div>
+  </div>
+  <div id="tape" hidden></div>
+
+  <div id="pads" hidden>
+    <button class="pad" data-lane="0"><span>-</span><small>← / A</small></button>
+    <button class="pad" data-lane="1"><span>-</span><small>↓ / S</small></button>
+    <button class="pad" data-lane="2"><span>-</span><small>→ / D</small></button>
+  </div>
+
+  <div class="overlay" id="startOv">
+    <div class="card">
+      <h1>π RUN</h1>
+      <p class="sub">리듬에 맞춰 달리며 원주율을 외워 보세요</p>
+      <ul class="how">
+        <li>다음 자리 숫자가 적힌 문을 고르세요 — <kbd>←</kbd> <kbd>↓</kbd> <kbd>→</kbd>, <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>, 숫자 키, 또는 터치</li>
+        <li>문이 <b>판정선</b>에 닿는 박자에 정확히 누를수록 고득점<br><b>PERFECT ×3 · GREAT ×2 · GOOD ×1</b></li>
+        <li><b>콤보</b>를 이어 가면 점수 배율이 최대 ×5까지 올라갑니다</li>
+        <li>틀린 문은 <b>함정</b>, 놓치면 <b>벽</b>에 부딪혀 하트를 잃습니다 (하트 3개)</li>
+      </ul>
+      <div class="row">
+        <button class="btn" id="startBtn">시작하기</button>
+        <button class="btn ghost" id="rankBtn">랭킹 보기</button>
+      </div>
+      <div id="startBoard" hidden style="margin-top:16px"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="pauseOv" hidden>
+    <div class="card">
+      <h2>일시정지</h2>
+      <p class="sub">Esc 또는 아래 버튼으로 계속합니다</p>
+      <button class="btn" id="resumeBtn">계속하기</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="overOv" hidden>
+    <div class="card">
+      <h2 id="overTitle">GAME OVER</h2>
+      <div id="finalScore">0</div>
+      <div class="stats">
+        <div class="stat"><b id="stDigits">0</b><span>맞힌 자릿수</span></div>
+        <div class="stat"><b id="stCombo">0</b><span>최대 콤보</span></div>
+        <div class="stat"><b id="stPerfect">0</b><span>PERFECT</span></div>
+      </div>
+      <div id="fails"></div>
+      <div id="overBoard"></div>
+      <p class="note" id="rankNote"></p>
+      <button class="btn" id="retryBtn">다시 달리기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // 소수점 아래 1000자리 (bc로 계산해 넣은 값)
+  const PI = '1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679821480865132823066470938446095505822317253594081284811174502841027019385211055596446229489549303819644288109756659334461284756482337867831652712019091456485669234603486104543266482133936072602491412737245870066063155881748815209209628292540917153643678925903600113305305488204665213841469519415116094330572703657595919530921861173819326117931051185480744623799627495673518857527248912279381830119491298336733624406566430860213949463952247371907021798609437027705392171762931767523846748184676694051320005681271452635608277857713427577896091736371787214684409012249534301465495853710507922796892589235420199561121290219608640344181598136297747713099605187072113499999983729780499510597317328160963185950244594553469083026425223082533446850352619311881710100031378387528865875332083814206171776691473035982534904287554687311595628638823537875937519577818577805321712268066130019278766111959092164201989';
+
+  const RANK_KEY = 'pi-run-ranking-v1';
+  const NAME_KEY = 'pi-run-name';
+  const MAX_HEARTS = 3;
+  const PERFECT_MS = 0.05, GREAT_MS = 0.11;
+  const C = { cyan: '#5ee7ff', pink: '#ff5fa2', yellow: '#ffd84d', green: '#6dffa8' };
+
+  const $ = id => document.getElementById(id);
+  const app = $('app'), canvas = $('c'), g = canvas.getContext('2d');
+  const pads = [...document.querySelectorAll('.pad')];
+
+  // ---------- 템포 / 점수 규칙 ----------
+  const bpm = i => Math.min(168, 96 + 4 * Math.floor(i / 10));
+  const interval = i => 120 / bpm(i);                 // 문 사이 간격 = 2박
+  const hitWindow = i => Math.min(0.2, interval(i) * 0.4);
+  const comboMul = c => 1 + Math.min(c, 100) / 25;    // 최대 ×5
+
+  // ---------- 오디오 ----------
+  let ac = null, master = null, noiseBuf = null, muted = false;
+  function initAudio() {
+    if (ac) return;
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    master = ac.createGain(); master.gain.value = 0.5; master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.2, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const latency = () => Math.min(ac.outputLatency || ac.baseLatency || 0, 0.15);
+  const now = () => ac.currentTime - latency();        // 귀에 들리는 시점 기준 시계
+
+  function tone(type, f0, f1, t, dur, vol) {
+    t = Math.max(t, ac.currentTime);
+    const o = ac.createOscillator(), a = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    a.gain.setValueAtTime(vol, t); a.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(a).connect(master); o.start(t); o.stop(t + dur + 0.02);
+  }
+  const kick = t => tone('sine', 150, 45, t, 0.18, 0.9);
+  const click = t => tone('square', 1200, 1200, t, 0.04, 0.15);
+  function hat(t) {
+    t = Math.max(t, ac.currentTime);
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), a = ac.createGain();
+    s.buffer = noiseBuf; f.type = 'highpass'; f.frequency.value = 7000;
+    a.gain.setValueAtTime(0.16, t); a.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    s.connect(f).connect(a).connect(master); s.start(t); s.stop(t + 0.06);
+  }
+  const BASS = [55, 55, 65.41, 73.42];
+  const bass = (t, i) => tone('triangle', BASS[Math.floor(i / 4) % 4], BASS[Math.floor(i / 4) % 4], t, 0.28, 0.35);
+  const SCALE = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22];  // A 마이너 펜타토닉: 숫자마다 음 하나
+  function digitNote(d, sparkle) {
+    const f = 440 * Math.pow(2, SCALE[d] / 12);
+    tone('triangle', f, f, ac.currentTime, 0.22, 0.3);
+    if (sparkle) tone('sine', f * 2, f * 2, ac.currentTime, 0.3, 0.12);
+  }
+  const buzz = () => tone('sawtooth', 120, 55, ac.currentTime, 0.3, 0.3);
+
+  // ---------- 게임 상태 ----------
+  let game = null, paused = false;
+
+  function makeGate(i, time) {
+    const digit = +PI[i];
+    const others = [];
+    while (others.length < 2) {
+      const r = Math.floor(Math.random() * 10);
+      if (r !== digit && !others.includes(r)) others.push(r);
+    }
+    const choices = [digit, ...others];
+    for (let k = 2; k > 0; k--) {
+      const j = Math.floor(Math.random() * (k + 1));
+      [choices[k], choices[j]] = [choices[j], choices[k]];
+    }
+    return { i, digit, choices, time, state: null, chosen: -1, resolvedAt: 0 };
+  }
+
+  function ensureGates() {
+    const gs = game.gates;
+    while (gs.length < game.cur + 8 && gs.length < PI.length) {
+      const i = gs.length;
+      const time = i === 0 ? game.t0 + 2 * interval(0) : gs[i - 1].time + interval(i);
+      gs.push(makeGate(i, time));
+    }
+  }
+
+  function startGame() {
+    initAudio();
+    ac.resume();
+    paused = false;
+    game = {
+      t0: ac.currentTime + 0.4,
+      gates: [], cur: 0, sched: 0, posIdx: 0,
+      score: 0, combo: 0, maxCombo: 0, hearts: MAX_HEARTS,
+      correct: 0, perfect: 0, fails: [], history: [],
+      lane: 1, laneX: 1, hurtAt: -9, hurtType: null,
+      judge: null, particles: [], over: false, overAt: 0, cleared: false,
+    };
+    ensureGates();
+    const beat = interval(0) / 2;
+    for (let k = 0; k < 4; k++) click(game.t0 + k * beat);
+    $('startOv').hidden = $('overOv').hidden = $('pauseOv').hidden = true;
+    $('hud').hidden = $('tape').hidden = $('pads').hidden = false;
+    updateHud(); updatePads();
+  }
+
+  function resolve(gate, lane, dt) {
+    const t = now();
+    gate.chosen = lane; gate.resolvedAt = t;
+    game.lane = lane;
+    if (gate.choices[lane] === gate.digit) {
+      const a = Math.abs(dt);
+      const grade = a <= PERFECT_MS ? 'PERFECT' : a <= GREAT_MS ? 'GREAT' : 'GOOD';
+      const tm = grade === 'PERFECT' ? 3 : grade === 'GREAT' ? 2 : 1;
+      game.combo++; game.correct++;
+      if (grade === 'PERFECT') game.perfect++;
+      game.maxCombo = Math.max(game.maxCombo, game.combo);
+      const pts = Math.round(100 * tm * comboMul(game.combo));
+      game.score += pts;
+      gate.state = 'ok';
+      game.history.push({ d: gate.digit, ok: true });
+      const color = grade === 'PERFECT' ? C.yellow : grade === 'GREAT' ? C.cyan : C.green;
+      game.judge = { text: grade, sub: '+' + pts, color, at: t };
+      burst(lane, color, grade === 'PERFECT' ? 22 : 12);
+      digitNote(gate.digit, grade === 'PERFECT');
+      advance();
+    } else {
+      fail(gate, 'pit');
+    }
+  }
+
+  function fail(gate, type) {
+    const t = now();
+    gate.state = type; gate.resolvedAt = t;
+    game.hearts--; game.combo = 0;
+    game.hurtAt = t; game.hurtType = type;
+    game.fails.push({ pos: gate.i + 1, digit: gate.digit });
+    game.history.push({ d: gate.digit, ok: false });
+    game.judge = { text: type === 'pit' ? '함정!' : '놓쳤다!', sub: '정답은 ' + gate.digit, color: C.pink, at: t };
+    buzz();
+    if (navigator.vibrate) navigator.vibrate(80);
+    if (game.hearts <= 0) endGame(false);
+    advance();
+  }
+
+  function advance() {
+    game.cur++;
+    ensureGates();
+    if (!game.over && game.cur >= PI.length) endGame(true);
+    updateHud(); updatePads();
+  }
+
+  function endGame(cleared) {
+    game.over = true; game.cleared = cleared; game.overAt = now();
+    setTimeout(showOver, 1100);
+  }
+
+  function checkMiss() {
+    if (!game || game.over) return;
+    const gate = game.gates[game.cur];
+    if (gate && now() > gate.time + hitWindow(gate.i)) fail(gate, 'wall');
+  }
+
+  function input(lane) {
+    if (!game || game.over || paused) return;
+    checkMiss();
+    if (game.over) return;
+    const gate = game.gates[game.cur];
+    if (!gate) return;
+    const dt = now() - gate.time;
+    pads[lane].classList.add('hit');
+    setTimeout(() => pads[lane].classList.remove('hit'), 90);
+    if (dt < -hitWindow(gate.i)) {       // 판정 구간 전: 벌점 없이 무시
+      game.judge = { text: '아직!', sub: '', color: '#9aa2d6', at: now() };
+      return;
+    }
+    resolve(gate, lane, dt);
+  }
+
+  function setPaused(p) {
+    if (!game || game.over || p === paused) return;
+    paused = p;
+    if (p) ac.suspend(); else ac.resume();
+    $('pauseOv').hidden = !p;
+  }
+
+  // ---------- HUD ----------
+  function updateHud() {
+    const hearts = $('hearts'); hearts.textContent = '';
+    for (let i = 0; i < MAX_HEARTS; i++) {
+      const s = document.createElement('span');
+      s.textContent = '♥'; if (i >= game.hearts) s.className = 'lost';
+      hearts.appendChild(s);
+    }
+    $('score').textContent = game.score.toLocaleString();
+    $('combo').textContent = game.combo > 1 ? `${game.combo} COMBO · ×${comboMul(game.combo).toFixed(1)}` : '';
+    const cnt = $('count'); cnt.textContent = '';
+    const b = document.createElement('b'); b.textContent = game.cur;
+    cnt.append('소수점 ', b, '자리', document.createElement('br'), bpm(Math.min(game.cur, PI.length - 1)) + ' BPM');
+
+    const tape = $('tape'); tape.textContent = '';
+    const hist = game.history, from = Math.max(0, hist.length - 12);
+    const pre = document.createElement('span');
+    pre.className = 'pre'; pre.textContent = from > 0 ? 'π = …' : 'π = 3.';
+    tape.appendChild(pre);
+    for (let i = from; i < hist.length; i++) {
+      const s = document.createElement('span');
+      s.textContent = hist[i].d;
+      s.className = !hist[i].ok ? 'bad' : i === hist.length - 1 ? 'last' : '';
+      tape.appendChild(s);
+    }
+    if (!game.over) {
+      const n = document.createElement('span'); n.className = 'next'; n.textContent = '?';
+      tape.appendChild(n);
+    }
+  }
+
+  function updatePads() {
+    const gate = game.gates[game.cur];
+    pads.forEach((p, k) => { p.firstElementChild.textContent = gate && !game.over ? gate.choices[k] : '-'; });
+  }
+
+  // ---------- 랭킹 ----------
+  function loadRank() {
+    try { const v = JSON.parse(localStorage.getItem(RANK_KEY)); return Array.isArray(v) ? v : []; }
+    catch { return []; }
+  }
+  function saveRank(list) { try { localStorage.setItem(RANK_KEY, JSON.stringify(list)); } catch {} }
+  function lastName() { try { return localStorage.getItem(NAME_KEY) || 'PLAYER'; } catch { return 'PLAYER'; } }
+
+  function renderBoard(el, list, meId) {
+    el.textContent = '';
+    if (!list.length) {
+      const p = document.createElement('div'); p.className = 'empty';
+      p.textContent = '아직 기록이 없습니다. 첫 기록을 남겨 보세요!';
+      el.appendChild(p); return;
+    }
+    const table = document.createElement('table'); table.className = 'board';
+    const cap = document.createElement('caption'); cap.textContent = '🏆 랭킹 TOP 10'; table.appendChild(cap);
+    const head = table.insertRow();
+    ['#', '이름', '점수', '자릿수', '콤보'].forEach(h => { const th = document.createElement('th'); th.textContent = h; head.appendChild(th); });
+    list.forEach((e, idx) => {
+      const tr = table.insertRow();
+      tr.insertCell().textContent = idx + 1;
+      const nameCell = tr.insertCell();
+      if (e.id === meId) {
+        tr.className = 'me';
+        const inp = document.createElement('input');
+        inp.value = e.name; inp.maxLength = 12; inp.setAttribute('aria-label', '이름');
+        inp.addEventListener('input', () => {
+          e.name = inp.value.trim() || 'PLAYER';
+          saveRank(list);
+          try { localStorage.setItem(NAME_KEY, e.name); } catch {}
+        });
+        inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') inp.blur(); });
+        nameCell.appendChild(inp);
+      } else nameCell.textContent = e.name;
+      tr.insertCell().textContent = e.score.toLocaleString();
+      tr.insertCell().textContent = e.digits;
+      tr.insertCell().textContent = e.combo;
+    });
+    el.appendChild(table);
+  }
+
+  function showOver() {
+    if (!game) return;
+    ac.suspend();
+    const entry = {
+      id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      name: lastName(), score: game.score, digits: game.correct, combo: game.maxCombo, date: Date.now(),
+    };
+    let list = loadRank();
+    list.push(entry);
+    list.sort((a, b) => b.score - a.score || b.digits - a.digits || a.date - b.date);
+    const rank = list.indexOf(entry);
+    list = list.slice(0, 10);
+    saveRank(list);
+
+    $('overTitle').textContent = game.cleared ? '🎉 1000자리 완주!' : 'GAME OVER';
+    $('finalScore').textContent = game.score.toLocaleString();
+    $('stDigits').textContent = game.correct;
+    $('stCombo').textContent = game.maxCombo;
+    $('stPerfect').textContent = game.perfect;
+    const fails = $('fails'); fails.textContent = '';
+    if (game.fails.length) {
+      fails.append('복습할 자리 ');
+      game.fails.forEach(f => {
+        const c = document.createElement('span'); c.className = 'chip';
+        c.textContent = `${f.pos}번째 = ${f.digit}`; fails.appendChild(c);
+      });
+    }
+    renderBoard($('overBoard'), list, entry.id);
+    $('rankNote').textContent = rank < 10
+      ? `${rank + 1}위에 올랐습니다! 이름을 바꾸려면 노란 칸을 수정하세요.`
+      : `이번 기록은 ${rank + 1}위 — 순위권(TOP 10) 밖입니다.`;
+    $('hud').hidden = $('tape').hidden = $('pads').hidden = true;
+    $('overOv').hidden = false;
+    $('retryBtn').focus();
+  }
+
+  // ---------- 입력 ----------
+  const KEY_LANE = { ArrowLeft: 0, KeyA: 0, ArrowDown: 1, ArrowUp: 1, KeyS: 1, ArrowRight: 2, KeyD: 2 };
+  addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+    const code = e.code;
+    if (code === 'Escape' || code === 'KeyP') { setPaused(!paused); return; }
+    if (code === 'KeyM' && master) { muted = !muted; master.gain.value = muted ? 0 : 0.5; return; }
+    if (code === 'Space' || code === 'Enter') {
+      if (e.target.tagName === 'BUTTON') return;      // 포커스된 버튼의 기본 동작에 맡김
+      if (paused) setPaused(false);
+      else if (!$('startOv').hidden || !$('overOv').hidden) startGame();
+      e.preventDefault(); return;
+    }
+    if (code in KEY_LANE) { input(KEY_LANE[code]); e.preventDefault(); return; }
+    const m = /^(?:Digit|Numpad)(\d)$/.exec(code);     // 숫자 키: 그 숫자가 적힌 문을 선택
+    if (m && game && !game.over) {
+      const gate = game.gates[game.cur];
+      const lane = gate ? gate.choices.indexOf(+m[1]) : -1;
+      if (lane >= 0) input(lane);
+    }
+  });
+  pads.forEach(p => p.addEventListener('pointerdown', e => { e.preventDefault(); input(+p.dataset.lane); }));
+  canvas.addEventListener('pointerdown', e => {
+    const r = canvas.getBoundingClientRect();
+    const dx = e.clientX - r.left - view.W / 2;
+    input(dx < -view.laneW / 2 ? 0 : dx > view.laneW / 2 ? 2 : 1);
+  });
+  $('startBtn').onclick = startGame;
+  $('retryBtn').onclick = startGame;
+  $('resumeBtn').onclick = () => setPaused(false);
+  $('rankBtn').onclick = () => {
+    const el = $('startBoard');
+    el.hidden = !el.hidden;
+    if (!el.hidden) renderBoard(el, loadRank(), null);
+  };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
+
+  // ---------- 렌더링 ----------
+  const view = { W: 0, H: 0, laneW: 100, horizon: 0, playerY: 0 };
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    view.W = app.clientWidth; view.H = app.clientHeight;
+    canvas.width = Math.round(view.W * dpr); canvas.height = Math.round(view.H * dpr);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    view.laneW = Math.min(view.W * 0.27, 150);
+    view.horizon = view.H * 0.3;
+    view.playerY = Math.max(view.horizon + 120, view.H - 165);
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  const stars = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.3 + 0.3, p: Math.random() * 6.28 }));
+  const DEPTH_K = 0.9;
+  const scaleAt = depth => 1 / (1 + Math.max(depth, -0.7) * DEPTH_K);
+  const yAt = s => view.horizon + (view.playerY - view.horizon) * s;
+  const xAt = (laneUnits, s) => view.W / 2 + laneUnits * view.laneW * s;
+
+  function position(t) {     // 문 i가 판정선에 닿을 때 정확히 i가 되는 연속 좌표
+    const gs = game.gates;
+    while (game.posIdx < gs.length && gs[game.posIdx].time <= t) game.posIdx++;
+    const k = game.posIdx;
+    if (k >= gs.length) return gs.length - 1 + (t - gs[gs.length - 1].time) / interval(gs.length - 1);
+    const prevT = k > 0 ? gs[k - 1].time : gs[0].time - interval(0);
+    return k - 1 + (t - prevT) / (gs[k].time - prevT);
+  }
+
+  function burst(lane, color, n) {
+    const x = xAt(lane - 1, 1), y = view.playerY - view.laneW * 0.45;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 6.28, v = 80 + Math.random() * 220;
+      game.particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, life: 0.5 + Math.random() * 0.3, age: 0, color });
+    }
+  }
+
+  function drawBackdrop(wall) {
+    const { W, H, horizon } = view;
+    const sky = g.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#070821'); sky.addColorStop(0.3, '#2a1a5e'); sky.addColorStop(0.31, '#0e1036'); sky.addColorStop(1, '#0b0d2a');
+    g.fillStyle = sky; g.fillRect(0, 0, W, H);
+    for (const s of stars) {
+      g.globalAlpha = 0.35 + 0.45 * Math.sin(wall * 1.5 + s.p);
+      g.fillStyle = '#fff';
+      g.beginPath(); g.arc(s.x * W, s.y * horizon * 0.95, s.r, 0, 6.28); g.fill();
+    }
+    g.globalAlpha = 1;
+    // 지평선의 π 태양
+    const r = Math.min(W * 0.16, 80);
+    const sun = g.createRadialGradient(W / 2, horizon, r * 0.2, W / 2, horizon, r * 2.2);
+    sun.addColorStop(0, 'rgba(255,120,170,.55)'); sun.addColorStop(1, 'rgba(255,120,170,0)');
+    g.fillStyle = sun; g.fillRect(0, horizon - r * 2.2, W, r * 2.2);
+    g.save();
+    g.beginPath(); g.rect(0, 0, W, horizon); g.clip();
+    const disc = g.createLinearGradient(0, horizon - r, 0, horizon);
+    disc.addColorStop(0, '#ffd84d'); disc.addColorStop(1, '#ff5fa2');
+    g.fillStyle = disc; g.beginPath(); g.arc(W / 2, horizon, r, 0, 6.28); g.fill();
+    g.fillStyle = 'rgba(40,16,80,.55)'; g.font = `800 ${r * 0.9}px Georgia, serif`;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('π', W / 2, horizon - r * 0.42);
+    g.restore();
+  }
+
+  function drawRoad(pos, pulse) {
+    const { W, H, laneW, horizon, playerY } = view;
+    const sFar = scaleAt(14), sBot = (H - horizon) / (playerY - horizon);
+    const half = 1.5;
+    g.beginPath();
+    g.moveTo(xAt(-half, sFar), yAt(sFar)); g.lineTo(xAt(half, sFar), yAt(sFar));
+    g.lineTo(xAt(half, sBot), H); g.lineTo(xAt(-half, sBot), H); g.closePath();
+    const road = g.createLinearGradient(0, horizon, 0, H);
+    road.addColorStop(0, '#1d1b55'); road.addColorStop(1, '#14173f');
+    g.fillStyle = road; g.fill();
+
+    // 박자선: 정수 위치 = 문, 0.5 위치 = 엇박
+    const first = Math.ceil((pos - 0.6) * 2) / 2;
+    for (let p = first; p < pos + 9; p += 0.5) {
+      const d = p - pos, s = scaleAt(d), y = yAt(s);
+      const whole = Number.isInteger(p);
+      g.strokeStyle = `rgba(94,231,255,${(whole ? 0.32 : 0.12) * Math.min(1, (9 - d) / 3)})`;
+      g.lineWidth = Math.max(1, (whole ? 3 : 1.5) * s);
+      g.beginPath(); g.moveTo(xAt(-half, s), y); g.lineTo(xAt(half, s), y); g.stroke();
+    }
+    // 차선과 가장자리
+    for (const u of [-1.5, -0.5, 0.5, 1.5]) {
+      const edge = Math.abs(u) === 1.5;
+      g.strokeStyle = edge ? C.pink : 'rgba(255,255,255,.16)';
+      g.lineWidth = edge ? 3 : 1.5;
+      g.beginPath(); g.moveTo(xAt(u, sFar), yAt(sFar)); g.lineTo(xAt(u, sBot), H); g.stroke();
+    }
+    // 판정선
+    g.strokeStyle = C.yellow; g.globalAlpha = 0.45 + 0.55 * pulse;
+    g.lineWidth = 3 + 5 * pulse; g.shadowColor = C.yellow; g.shadowBlur = 8 + 18 * pulse;
+    g.beginPath(); g.moveTo(xAt(-half, 1), playerY); g.lineTo(xAt(half, 1), playerY); g.stroke();
+    g.shadowBlur = 0; g.globalAlpha = 1;
+  }
+
+  function drawGates(pos, t) {
+    const gs = game.gates, { laneW } = view;
+    const last = Math.min(gs.length - 1, Math.floor(pos) + 7);
+    for (let j = last; j >= Math.max(0, game.cur - 2); j--) {
+      const gate = gs[j], d = j - pos;
+      if (d > 6.2 || d < -0.65) continue;
+      const s = scaleAt(d), y = yAt(s);
+      const fog = Math.min(1, (6.2 - d) / 1.6);
+      const since = gate.state ? t - gate.resolvedAt : 0;
+      for (let k = 0; k < 3; k++) {
+        let alpha = fog, fill = 'rgba(20,26,70,.9)', stroke = C.cyan, text = '#fff';
+        if (gate.state === 'ok') {
+          if (k === gate.chosen) continue;             // 통과한 문은 사라짐
+          alpha *= Math.max(0, 1 - since / 0.3);
+        } else if (gate.state) {
+          const right = gate.choices[k] === gate.digit;
+          fill = right ? 'rgba(20,90,60,.95)' : 'rgba(110,20,50,.95)';
+          stroke = right ? C.green : C.pink; text = right ? C.green : '#ffc2d8';
+          alpha *= Math.max(0, 1 - since / 0.7);
+        }
+        if (alpha <= 0.01) continue;
+        const w = laneW * s * 0.84, h = laneW * s * 0.95, x = xAt(k - 1, s);
+        g.globalAlpha = alpha;
+        g.fillStyle = fill; g.strokeStyle = stroke;
+        g.lineWidth = Math.max(1, (j === game.cur ? 4 : 2.5) * s);
+        if (j === game.cur && !gate.state) { g.shadowColor = C.cyan; g.shadowBlur = 14; }
+        g.beginPath(); g.roundRect(x - w / 2, y - h, w, h, 10 * s); g.fill(); g.stroke();
+        g.shadowBlur = 0;
+        g.fillStyle = text;
+        g.font = `800 ${Math.max(6, h * 0.62)}px ui-monospace, Menlo, Consolas, monospace`;
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(gate.choices[k], x, y - h * 0.47);
+      }
+    }
+    g.globalAlpha = 1;
+  }
+
+  function drawPi(x, y, sc, phase, rot, alpha) {
+    g.save();
+    g.translate(x, y); g.rotate(rot); g.scale(sc, sc); g.globalAlpha = alpha;
+    const bob = -Math.abs(Math.sin(phase)) * 4, sw = Math.sin(phase) * 9;
+    const shape = () => {
+      g.beginPath();
+      g.moveTo(-9, -42 + bob); g.quadraticCurveTo(-10, -20 + bob, -12 + sw, -4 - Math.max(0, sw) * 0.6);
+      g.moveTo(11, -42 + bob); g.quadraticCurveTo(11, -20 + bob, 13 - sw, -4 - Math.max(0, -sw) * 0.6);
+      g.moveTo(-27, -38 + bob); g.quadraticCurveTo(-24, -47 + bob, -14, -46 + bob); g.lineTo(25, -46 + bob);
+    };
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    shape(); g.strokeStyle = '#1a1140'; g.lineWidth = 16; g.stroke();
+    shape(); g.strokeStyle = C.yellow; g.lineWidth = 11; g.stroke();
+    for (const ex of [-3, 10]) {
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(ex, -46 + bob, 3.4, 0, 6.28); g.fill();
+      g.fillStyle = '#1a1140'; g.beginPath(); g.arc(ex + 0.6, -46.5 + bob, 1.7, 0, 6.28); g.fill();
+    }
+    g.restore();
+  }
+
+  function drawPlayer(pos, t) {
+    const { laneW, playerY } = view;
+    const sc = laneW / 100, x = xAt(game.laneX - 1, 1);
+    const since = t - game.hurtAt;
+    let dy = 0, rot = 0, alpha = 1, size = 1;
+    if (game.hurtType === 'pit' && (since < 0.55 || game.over)) {
+      const p = Math.min(1, since / 0.45);
+      g.fillStyle = '#05051a'; g.strokeStyle = '#7a3cff'; g.lineWidth = 3;
+      g.beginPath(); g.ellipse(x, playerY + 2, laneW * 0.4, laneW * 0.15, 0, 0, 6.28); g.fill(); g.stroke();
+      size = 1 - p * 0.75; dy = p * 14; alpha = 1 - p; rot = p * 1.2;
+    } else if (game.hurtType === 'wall' && (since < 0.45 || game.over)) {
+      const p = Math.min(1, since / 0.4);
+      dy = Math.sin(p * Math.PI) * 26;
+      rot = game.over ? p * 1.45 : Math.sin(since * 30) * 0.3 * (1 - p);
+    } else if (since < 1.0 && Math.floor(since * 14) % 2) {
+      alpha = 0.3;                                    // 부활 직후 깜빡임
+    }
+    if (alpha > 0.02) {
+      g.fillStyle = 'rgba(0,0,0,.35)';
+      g.beginPath(); g.ellipse(x, playerY + 3, 24 * sc * size, 7 * sc * size, 0, 0, 6.28); g.fill();
+      drawPi(x, playerY + dy, sc * size, pos * Math.PI * 2, rot, alpha);
+    }
+  }
+
+  function drawFx(t, dtFrame) {
+    const { laneW, playerY, W, horizon } = view;
+    game.particles = game.particles.filter(p => (p.age += dtFrame) < p.life);
+    for (const p of game.particles) {
+      p.x += p.vx * dtFrame; p.y += p.vy * dtFrame; p.vy += 500 * dtFrame;
+      g.globalAlpha = 1 - p.age / p.life; g.fillStyle = p.color;
+      g.fillRect(p.x - 3, p.y - 3, 6, 6);
+    }
+    g.globalAlpha = 1;
+    const j = game.judge;
+    if (j) {
+      const age = t - j.at;
+      if (age < 0.7) {
+        const x = xAt(game.laneX - 1, 1), y = playerY - laneW * 1.05 - age * 40;
+        const pop = 1 + Math.max(0, 0.12 - age) * 3;
+        g.globalAlpha = Math.min(1, (0.7 - age) / 0.3);
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.font = `900 ${26 * pop}px system-ui, sans-serif`;
+        g.lineWidth = 5; g.strokeStyle = 'rgba(8,8,30,.85)'; g.strokeText(j.text, x, y);
+        g.fillStyle = j.color; g.fillText(j.text, x, y);
+        if (j.sub) {
+          g.font = '700 15px system-ui, sans-serif';
+          g.strokeText(j.sub, x, y + 24); g.fillStyle = '#fff'; g.fillText(j.sub, x, y + 24);
+        }
+        g.globalAlpha = 1;
+      }
+    }
+    if (game.cur === 0 && !game.over && game.gates[0].time - t > interval(0) * 0.9) {
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = '900 34px system-ui, sans-serif'; g.fillStyle = C.yellow;
+      g.fillText('준비!', W / 2, horizon + (playerY - horizon) * 0.45);
+    }
+  }
+
+  let lastWall = performance.now();
+  function frame(wallMs) {
+    requestAnimationFrame(frame);
+    const dtFrame = Math.min(0.05, (wallMs - lastWall) / 1000); lastWall = wallMs;
+    const wall = wallMs / 1000;
+    g.save();
+    if (!game) {                                       // 타이틀 화면 배경
+      drawBackdrop(wall);
+      g.restore(); return;
+    }
+    if (!paused) checkMiss();
+    const t = now();
+
+    // 다가오는 문의 소리를 미리 예약
+    if (!game.over && !paused) {
+      while (game.sched < game.gates.length && game.gates[game.sched].time - interval(game.sched) < ac.currentTime + 0.3) {
+        const gate = game.gates[game.sched];
+        kick(gate.time); bass(gate.time, gate.i);
+        if (gate.i > 0) hat(gate.time - interval(gate.i) / 2);
+        game.sched++;
+      }
+    }
+
+    const pos = position(game.over ? game.overAt : t);
+    const frac = pos - Math.floor(pos);
+    const pulse = pos < 0 ? 0 : Math.exp(-frac * 5);
+    if (!paused) game.laneX += (game.lane - game.laneX) * Math.min(1, dtFrame * 20);
+
+    const hurt = t - game.hurtAt;
+    if (hurt < 0.25) g.translate((Math.random() - 0.5) * 14 * (1 - hurt / 0.25), (Math.random() - 0.5) * 10 * (1 - hurt / 0.25));
+    drawBackdrop(wall);
+    drawRoad(pos, pulse);
+    drawGates(pos, t);
+    drawPlayer(pos, t);
+    drawFx(t, paused ? 0 : dtFrame);
+    if (hurt < 0.3) { g.fillStyle = `rgba(255,60,120,${0.25 * (1 - hurt / 0.3)})`; g.fillRect(-20, -20, view.W + 40, view.H + 40); }
+    g.restore();
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

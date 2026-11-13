@@ -275,7 +275,7 @@
       gates: [], cur: 0, sched: 0, posIdx: 0,
       score: 0, combo: 0, maxCombo: 0, hearts: MAX_HEARTS,
       correct: 0, perfect: 0, fails: [], history: [],
-      lane: 1, laneX: 1, hurtAt: -9, hurtType: null,
+      lane: 1, laneX: 1, hurtAt: -9, hurtType: null, jumpAt: -9,
       judge: null, particles: [], over: false, overAt: 0, cleared: false,
     };
     ensureGates();
@@ -300,6 +300,7 @@
       const pts = Math.round(100 * tm * comboMul(game.combo));
       game.score += pts;
       gate.state = 'ok';
+      game.jumpAt = t;
       game.history.push({ d: gate.digit, ok: true });
       const color = grade === 'PERFECT' ? C.yellow : grade === 'GREAT' ? C.cyan : C.green;
       game.judge = { text: grade, sub: '+' + pts, color, at: t };
@@ -652,23 +653,57 @@
     g.globalAlpha = 1;
   }
 
-  function drawPi(x, y, sc, phase, rot, alpha) {
+  function drawPi(x, y, sc, phase, rot, alpha, air) {
     g.save();
     g.translate(x, y); g.rotate(rot); g.scale(sc, sc); g.globalAlpha = alpha;
-    const bob = -Math.abs(Math.sin(phase)) * 4, sw = Math.sin(phase) * 9;
-    const shape = () => {
-      g.beginPath();
-      g.moveTo(-9, -42 + bob); g.quadraticCurveTo(-10, -20 + bob, -12 + sw, -4 - Math.max(0, sw) * 0.6);
-      g.moveTo(11, -42 + bob); g.quadraticCurveTo(11, -20 + bob, 13 - sw, -4 - Math.max(0, -sw) * 0.6);
-      g.moveTo(-27, -38 + bob); g.quadraticCurveTo(-24, -47 + bob, -14, -46 + bob); g.lineTo(25, -46 + bob);
+    // 둥글둥글한 곰 체형의 임팔라 (오리지널 디자인). 발끝이 y=0.
+    const bob = -Math.abs(Math.sin(phase)) * 4, sw = Math.sin(phase);
+    const INK = '#3b2212', FUR = '#dc9a55', CREAM = '#fff3dc', HORN = '#2e1c14';
+    const blob = (cx, cy, rx, ry, fill, tilt = 0) => {
+      g.beginPath(); g.ellipse(cx, cy, rx, ry, tilt, 0, 6.28);
+      g.fillStyle = fill; g.fill(); g.stroke();
     };
     g.lineCap = 'round'; g.lineJoin = 'round';
-    shape(); g.strokeStyle = '#1a1140'; g.lineWidth = 16; g.stroke();
-    shape(); g.strokeStyle = C.yellow; g.lineWidth = 11; g.stroke();
-    for (const ex of [-3, 10]) {
-      g.fillStyle = '#fff'; g.beginPath(); g.arc(ex, -46 + bob, 3.4, 0, 6.28); g.fill();
-      g.fillStyle = '#1a1140'; g.beginPath(); g.arc(ex + 0.6, -46.5 + bob, 1.7, 0, 6.28); g.fill();
+    g.strokeStyle = INK; g.lineWidth = 2.5;
+
+    // 다리 (검은 발굽)
+    for (const side of [-1, 1]) {
+      const k = sw * side, lift = Math.max(0, k) * 7 * (1 - air) + air * 9;   // 점프 중엔 두 다리를 접음
+      blob(side * 9 + k * 3, -9 - lift, 6, 9, FUR);
+      blob(side * 9 + k * 3, -3 - lift, 6.5, 4, HORN);
     }
+    // 팔 (점프 중엔 만세)
+    for (const side of [-1, 1]) {
+      blob(side * (19 + air * 3), -30 + bob - sw * side * 5 * (1 - air) - air * 12, 5, 9, FUR, side * (0.5 + sw * side * 0.5 * (1 - air) + air * 0.9));
+    }
+    // 몸통(등), 엉덩이의 검은 줄무늬, 흰 꼬리
+    blob(0, -27 + bob, 19, 19, FUR);
+    g.strokeStyle = HORN; g.lineWidth = 3;
+    for (const side of [-1, 1]) {
+      g.beginPath(); g.moveTo(side * 11, -24 + bob); g.quadraticCurveTo(side * 13, -16 + bob, side * 9, -10 + bob); g.stroke();
+    }
+    g.strokeStyle = INK; g.lineWidth = 2.5;
+    const wag = Math.sin(phase * 2) * 0.25;
+    blob(wag * 6, -15 + bob, 4.5, 7.5, CREAM, wag);
+    g.strokeStyle = HORN; g.lineWidth = 2.5;
+    g.beginPath(); g.moveTo(wag * 3, -21 + bob); g.lineTo(wag * 8, -10 + bob); g.stroke();
+
+    // 뿔: 임팔라 특유의 S자 곡선
+    g.strokeStyle = HORN; g.lineWidth = 4.5;
+    for (const side of [-1, 1]) {
+      g.beginPath(); g.moveTo(side * 6, -62 + bob);
+      g.bezierCurveTo(side * 19, -72 + bob, side * 3, -80 + bob, side * 13, -93 + bob);
+      g.stroke();
+    }
+    g.strokeStyle = INK; g.lineWidth = 2.5;
+    // 귀
+    for (const side of [-1, 1]) {
+      blob(side * 19, -57 + bob, 9, 4.5, FUR, side * -0.45);
+      g.save(); g.lineWidth = 0.001; blob(side * 25, -60 + bob, 2.6, 2, HORN, side * -0.45); g.restore();   // 귀 끝 검은 털
+    }
+    // 뒤통수와 정수리의 짙은 털
+    blob(0, -50 + bob, 17, 14, FUR);
+    g.save(); g.lineWidth = 0.001; blob(0, -59 + bob, 6, 3.5, '#b87536'); g.restore();
     g.restore();
   }
 
@@ -689,10 +724,15 @@
     } else if (since < 1.0 && Math.floor(since * 14) % 2) {
       alpha = 0.3;                                    // 부활 직후 깜빡임
     }
+    // 정답을 맞히면 문을 뛰어넘는 점프
+    const jp = (t - game.jumpAt) / 0.42;
+    const air = game.jumpAt > game.hurtAt && jp >= 0 && jp < 1 ? Math.sin(jp * Math.PI) : 0;
+    dy -= air * laneW * 0.6;
     if (alpha > 0.02) {
-      g.fillStyle = 'rgba(0,0,0,.35)';
-      g.beginPath(); g.ellipse(x, playerY + 3, 24 * sc * size, 7 * sc * size, 0, 0, 6.28); g.fill();
-      drawPi(x, playerY + dy, sc * size, pos * Math.PI * 2, rot, alpha);
+      const sh = size * (1 - air * 0.4);
+      g.fillStyle = `rgba(0,0,0,${0.35 * (1 - air * 0.5)})`;
+      g.beginPath(); g.ellipse(x, playerY + 3, 24 * sc * sh, 7 * sc * sh, 0, 0, 6.28); g.fill();
+      drawPi(x, playerY + dy, sc * size, pos * Math.PI * 2, rot, alpha, air);
     }
   }
 
